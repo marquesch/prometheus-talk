@@ -1,0 +1,16 @@
+services:
+  app:
+    build: ./app
+    ports:
+      - "8000:8000"
+      - "9100:9100"
+      - "9101:9101"
+    networks:
+      - local-network
+    volumes:
+      - ./app:/app
+
+networks:
+  local-network:
+    driver: bridge
+
