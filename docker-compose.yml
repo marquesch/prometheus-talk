@@ -3,8 +3,6 @@ services:
     build: ./app
     ports:
       - "8000:8000"
-      - "9100:9100"
-      - "9101:9101"
     volumes:
       - ./app:/app
 
