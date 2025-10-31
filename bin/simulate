@@ -1,5 +1,6 @@
 #!/bin/bash
+no_of_requests=$1
 
-for i in {1..100}; do
+for i in $(seq 1 $no_of_requests); do
     curl -X POST localhost:8000/send-email &> /dev/null &
 done

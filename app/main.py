@@ -1,8 +1,8 @@
-import asyncio
 import random
 import time
 from contextlib import asynccontextmanager
 
+import mock
 import prometheus_client as prometheus
 from fastapi import FastAPI, HTTPException, Request, Response
 
@@ -14,10 +14,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+buckets = (250, 500, 750, 1000, 2500, 5000, 10000, 20000, 30000, 60000, float("inf"))
 
 send_email_http_request_timing_histogram = prometheus.Histogram(
     "send_email_http_request_timing_histogram",
     "Histogram representing time taken to send emails via http request in miliseconds",
+    buckets=buckets,
 )
 
 endpoint_call_counter = prometheus.Counter(
@@ -43,29 +45,12 @@ async def root():
 
 @app.post("/send-email")
 async def send_email():
-    await send_email_via_http_request()
-
-
-def _calculate_time_for_each_request():
-    chance = random.randint(0, 100)
-
-    if chance >= 99:
-        time_range = (20, 30)
-    elif chance >= 80:
-        time_range = (8, 10)
-    else:
-        time_range = (0, 1)
-
-    return random.uniform(*time_range)
-
-
-async def send_email_via_http_request():
     start = time.perf_counter_ns()
-    await asyncio.sleep(_calculate_time_for_each_request())
+    await mock.send_email_via_http_request()
+    if random.randint(0, 100) > 99:
+        raise HTTPException(500)
 
     end = time.perf_counter_ns()
     time_taken_ms = (end - start) / 1_000_000
     send_email_http_request_timing_histogram.observe(time_taken_ms)
-
-    if random.randint(0, 100) > 90:
-        raise HTTPException(500)
+    return {"status_code": 200, "message": "OK"}
