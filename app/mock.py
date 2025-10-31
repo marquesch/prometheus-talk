@@ -18,10 +18,22 @@ CHANCES_BY_TIME_OF_DAY = {
     },
 }
 
-TIME_RANGES_BY_REQUEST_SPEED_CATEGORY = {
-    "regular": (0, 1),
-    "slow": (1, 5),
-    "sluggish": (5, 30),
+TIME_RANGES_BY_TRAFFIC = {
+    "low": {
+        "regular": (0, 0.5),
+        "slow": (0.5, 3),
+        "sluggish": (3, 10),
+    },
+    "mid": {
+        "regular": (0, 1),
+        "slow": (1, 5),
+        "sluggish": (5, 30),
+    },
+    "high": {
+        "regular": (0, 2),
+        "slow": (2, 10),
+        "sluggish": (10, 50),
+    },
 }
 
 HIGH_TRAFFIC_HOURS = [10, 11, 13, 14, 15]
@@ -52,12 +64,13 @@ def _calculate_time_for_each_request():
     chances = CHANCES_BY_TIME_OF_DAY[traffic]
 
     chance = random.uniform(0, 1)
+    speed_category = "regular"
     if chance < chances["sluggish_request"]:
-        time_range = TIME_RANGES_BY_REQUEST_SPEED_CATEGORY["sluggish"]
+        speed_category = "sluggish"
     elif chance < chances["slow_request"]:
-        time_range = TIME_RANGES_BY_REQUEST_SPEED_CATEGORY["slow"]
-    else:
-        time_range = TIME_RANGES_BY_REQUEST_SPEED_CATEGORY["regular"]
+        speed_category = "slow"
+
+    time_range = TIME_RANGES_BY_TRAFFIC[traffic][speed_category]
 
     return random.uniform(*time_range)
 
