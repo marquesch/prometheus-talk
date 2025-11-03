@@ -2,9 +2,14 @@ services:
   app:
     build: ./app
     ports:
-      - "8088:8000"
+      - "8000:8000"
     volumes:
       - ./app:/app
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1024M
 
   prometheus-server:
     image: prom/prometheus
@@ -14,5 +19,13 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
 
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
 volumes:
   prometheus-data:
+  grafana-data:

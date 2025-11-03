@@ -30,7 +30,7 @@ endpoint_call_counter = prometheus.Counter(
 
 
 @app.middleware("http")
-async def increase_prometheus_counter(request: Request, call_next):
+async def increase_endpoint_call_counter(request: Request, call_next):
     response: Response = await call_next(request)
     endpoint_call_counter.labels(
         url=request.url, status_code=response.status_code
