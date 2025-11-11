@@ -1,56 +1,96 @@
-import random
-import time
-from contextlib import asynccontextmanager
-
-import mock
-import prometheus_client as prometheus
-from fastapi import FastAPI, HTTPException, Request, Response
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    prometheus.start_http_server(9101)
-    yield
+from auth import get_current_user
+from cfg import app
+from fastapi import Depends, HTTPException, status
+from model import Comment, Post, User
+from cfg import get_db_session
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
-app = FastAPI(lifespan=lifespan)
-buckets = (250, 500, 750, 1000, 2500, 5000, 10000, 20000, 30000, 60000, float("inf"))
-
-send_email_http_request_timing_histogram = prometheus.Histogram(
-    "send_email_http_request_timing_histogram",
-    "Histogram representing time taken to send emails via http request in miliseconds",
-    buckets=buckets,
-)
-
-endpoint_call_counter = prometheus.Counter(
-    "endpoint_call_counter",
-    "Counter representing the number of calls to each endpoint URL by return status code",
-    ["url", "status_code"],
-)
+class CreateCommentRequest(BaseModel):
+    body: str
 
 
-@app.middleware("http")
-async def increase_endpoint_call_counter(request: Request, call_next):
-    response: Response = await call_next(request)
-    endpoint_call_counter.labels(
-        url=request.url, status_code=response.status_code
-    ).inc()
-    return response
+class CreatePostRequest(BaseModel):
+    title: str
+    body: str
 
 
-@app.get("/")
-async def root():
-    return {"message": "Hello world!"}
+class UserInfo(BaseModel):
+    id: int
+    username: str
 
 
-@app.post("/send-email")
-async def send_email():
-    start = time.perf_counter_ns()
-    await mock.send_email_via_http_request()
-    if random.randint(0, 100) > 99:
-        raise HTTPException(500)
+@app.get("/me", response_model=UserInfo)
+async def get_user_info(current_user: User = Depends(get_current_user)):
+    return current_user.to_dict()
 
-    end = time.perf_counter_ns()
-    time_taken_ms = (end - start) / 1_000_000
-    send_email_http_request_timing_histogram.observe(time_taken_ms)
-    return {"status_code": 200, "message": "OK"}
+
+@app.post("/posts")
+async def create_post(
+    request: CreatePostRequest,
+    current_user: User = Depends(get_current_user),
+    db_session: Session = Depends(get_db_session),
+):
+    post = Post(title=request.title, body=request.body, user_id=current_user.id)
+    db_session.add(post)
+    db_session.flush()
+    db_session.refresh(post)
+
+    return post
+
+
+@app.get("/posts")
+async def get_posts(
+    current_user: User = Depends(get_current_user),
+    db_session: Session = Depends(get_db_session),
+):
+    return db_session.execute(select(Post)).scalars().all()
+
+
+@app.post("/posts/{post_id}/comments")
+async def create_comment(
+    post_id: int,
+    request: CreateCommentRequest,
+    current_user: User = Depends(get_current_user),
+    db_session: Session = Depends(get_db_session),
+):
+    post = db_session.execute(
+        select(Post).where(Post.id == post_id)
+    ).scalar_one_or_none()
+
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No post found"
+        )
+    comment = Comment(body=request.body, author=current_user, post_id=post_id)
+
+    db_session.add(comment)
+    db_session.flush()
+    db_session.refresh(comment)
+
+    return comment
+
+
+@app.get("/posts/{post_id}/comments")
+def get_comments(
+    post_id,
+    current_user: User = Depends(get_current_user),
+    db_session: Session = Depends(get_db_session),
+):
+    post = db_session.execute(
+        select(Post).where(Post.id == post_id)
+    ).scalar_one_or_none()
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No post found"
+        )
+
+    comments = (
+        db_session.execute(select(Comment).where(Comment.post_id == post_id))
+        .scalars()
+        .all()
+    )
+
+    return comments
