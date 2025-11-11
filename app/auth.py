@@ -2,13 +2,12 @@ from datetime import datetime, timedelta
 
 import jwt
 import prometheus_client as prometheus
-from cfg import app, get_db_session
+from cfg import Session, app
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from model import User
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 logged_users_gauge = prometheus.Gauge(
     "logged_users_gauge", "Currently logged users gauge."
@@ -54,11 +53,9 @@ def decode_jwt_token(token: str) -> dict:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db_session: Session = Depends(get_db_session),
 ) -> User:
     token = credentials.credentials
     payload = decode_jwt_token(token)
-    print(payload)
 
     username = payload.get("username")
     if username is None:
@@ -67,32 +64,34 @@ def get_current_user(
             detail="Invalid authentication credentials",
         )
 
-    user = db_session.query(User).where(User.username == username).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
-        )
+    with Session() as session:
+        user = session.query(User).where(User.username == username).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+            )
 
     return user
 
 
 @app.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, session: Session = Depends(get_db_session)):
+def login(request: LoginRequest):
     stmt = select(User).where(
         User.username == request.username,
         User.password_plaintext == request.password,
     )
-    user = session.execute(stmt).scalar_one_or_none()
+    with Session() as session:
+        user = session.execute(stmt).scalar_one_or_none()
 
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-        )
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+            )
 
-    logged_users_gauge.inc()
+        logged_users_gauge.inc()
 
-    return {"token": create_jwt_token(user)}
+        return {"token": create_jwt_token(user)}
 
 
 @app.post("/logout")

@@ -7,4 +7,4 @@ scrape_configs:
     scrape_interval: 5s
 
     static_configs:
-      - targets: ['app:9100', 'app:9101']
+      - targets: ['app:9100', 'cadvisor:8080', 'postgres_exporter:9187']

@@ -6,36 +6,22 @@ from fastapi import FastAPI, Request, Response
 from sqlalchemy import create_engine
 from sqlalchemy.orm import (
     DeclarativeBase,
-    scoped_session,
     sessionmaker,
 )
 
+alloc_mem = []
+
 engine = create_engine(
-    "postgresql+psycopg2://prometheus:prometheus@postgres:5432/prometheus", echo=True
+    "postgresql+psycopg2://prometheus:prometheus@postgres:5432/prometheus",
+    pool_size=10,
+    max_overflow=0,
 )
-session = sessionmaker(bind=engine)
-
-SessionLocal = scoped_session(session)
-
-
-def get_db_session():
-    session = SessionLocal()
-    try:
-        yield session
-        session.commit()
-    except:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-        SessionLocal.remove()
+Session = sessionmaker(bind=engine)
 
 
 class Base(DeclarativeBase):
     pass
 
-
-Base.metadata.create_all(bind=engine)
 
 endpoint_call_counter = prometheus.Counter(
     "endpoint_call_counter",
@@ -52,7 +38,7 @@ endpoint_time_histogram = prometheus.Histogram(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    prometheus.start_http_server(9101)
+    prometheus.start_http_server(9100)
     yield
 
 
@@ -61,6 +47,8 @@ app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def increase_endpoint_call_counter(request: Request, call_next):
+    alloc_mem.append("X" * 100_000)
+
     start = time.perf_counter()
     response: Response = await call_next(request)
     endpoint_call_counter.labels(
